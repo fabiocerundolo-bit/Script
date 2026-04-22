@@ -1,0 +1,222 @@
+---
+- name: T480 Dev Station on CachyOS
+  hosts: local
+  become: true
+  vars:
+    dotfiles_dir: "{{ lookup('env', 'HOME') }}/dotfiles"
+    dotfiles_niri_file: "niri/config.kdl"
+    install_throttled: false
+    manage_aur: true
+    base_packages:
+      - base-devel
+      - git
+      - curl
+      - pacman-contrib
+      - reflector
+    niri_packages:
+      - niri
+      - foot
+      - alacritty
+      - wayland-protocols
+      - xdg-desktop-portal-wlr
+      - fuzzel
+      - wofi
+      - mesa
+      - vulkan-intel
+      - intel-media-driver
+      - swaybg
+      - mako
+      - pipewire
+      - pipewire-alsa
+      - pipewire-pulse
+      - wireplumber
+    backend_packages:
+      - gcc
+      - clang
+      - cmake
+      - gdb
+      - ninja
+      - dotnet-sdk
+      - aspnet-runtime
+      - python
+      - python-pip
+    cloud_packages:
+      - docker
+      - docker-compose
+      - postgresql-libs
+      - redis
+    editor_packages:
+      - neovim
+      - cachy-browser
+    t480_packages:
+      - tlp
+      - fwupd
+    aur_phase2_packages:
+      - noctalia-git
+    aur_phase5_packages:
+      - visual-studio-code-bin
+    aur_phase6_optional_packages:
+      - throttled
+
+  tasks:
+    - name: Phase 1 | Refresh package database and upgrade system
+      community.general.pacman:
+        update_cache: true
+        upgrade: true
+      tags: [phase1]
+
+    - name: Phase 1 | Install base packages
+      community.general.pacman:
+        name: "{{ base_packages }}"
+        state: present
+      tags: [phase1]
+
+    - name: Phase 2 | Install Niri stack packages
+      community.general.pacman:
+        name: "{{ niri_packages }}"
+        state: present
+      tags: [phase2]
+
+    - name: AUR | Detect available helper
+      become: false
+      ansible.builtin.shell: |
+        if command -v cachyos-helper >/dev/null 2>&1; then
+          echo cachyos-helper
+        elif command -v yay >/dev/null 2>&1; then
+          echo yay
+        elif command -v paru >/dev/null 2>&1; then
+          echo paru
+        fi
+      args:
+        executable: /bin/bash
+      register: aur_helper_cmd
+      changed_when: false
+      when: manage_aur
+      tags: [phase2, phase5, phase6, aur]
+
+    - name: AUR | Persist helper fact
+      ansible.builtin.set_fact:
+        aur_helper: "{{ aur_helper_cmd.stdout | trim }}"
+      when: manage_aur
+      tags: [phase2, phase5, phase6, aur]
+
+    - name: AUR | Warn when helper is missing
+      ansible.builtin.debug:
+        msg: "No AUR helper found (cachyos-helper/yay/paru). Skipping AUR package installation."
+      when:
+        - manage_aur
+        - aur_helper | default('') == ''
+      tags: [phase2, phase5, phase6, aur]
+
+    - name: Phase 2 | Install AUR graphical packages
+      become: false
+      ansible.builtin.command: "{{ aur_helper }} -S --needed --noconfirm {{ item }}"
+      loop: "{{ aur_phase2_packages }}"
+      when:
+        - manage_aur
+        - aur_helper | default('') != ''
+      tags: [phase2, aur]
+
+    - name: Phase 3 | Install backend toolchain packages
+      community.general.pacman:
+        name: "{{ backend_packages }}"
+        state: present
+      tags: [phase3]
+
+    - name: Phase 3 | Try installing uv
+      community.general.pacman:
+        name: uv
+        state: present
+      register: uv_install
+      failed_when: false
+      tags: [phase3]
+
+    - name: Phase 3 | Fallback to python-uv if uv is unavailable
+      community.general.pacman:
+        name: python-uv
+        state: present
+      when: uv_install is failed
+      tags: [phase3]
+
+    - name: Phase 4 | Install cloud/frontend dependencies
+      community.general.pacman:
+        name: "{{ cloud_packages }}"
+        state: present
+      tags: [phase4]
+
+    - name: Phase 4 | Enable Docker
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+      tags: [phase4]
+
+    - name: Phase 4 | Add current user to docker group
+      ansible.builtin.user:
+        name: "{{ lookup('env', 'USER') }}"
+        groups: docker
+        append: true
+      tags: [phase4]
+
+    - name: Phase 5 | Install editor and browser packages
+      community.general.pacman:
+        name: "{{ editor_packages }}"
+        state: present
+      tags: [phase5]
+
+    - name: Phase 5 | Install AUR editor packages
+      become: false
+      ansible.builtin.command: "{{ aur_helper }} -S --needed --noconfirm {{ item }}"
+      loop: "{{ aur_phase5_packages }}"
+      when:
+        - manage_aur
+        - aur_helper | default('') != ''
+      tags: [phase5, aur]
+
+    - name: Phase 6 | Install T480 tweak packages
+      community.general.pacman:
+        name: "{{ t480_packages }}"
+        state: present
+      tags: [phase6]
+
+    - name: Phase 6 | Enable TLP
+      ansible.builtin.systemd:
+        name: tlp
+        enabled: true
+        state: started
+      tags: [phase6]
+
+    - name: Phase 6 | Disable power-profiles-daemon if present
+      ansible.builtin.systemd:
+        name: power-profiles-daemon
+        enabled: false
+        state: stopped
+      failed_when: false
+      tags: [phase6]
+
+    - name: Phase 6 | Optional AUR throttled install
+      become: false
+      ansible.builtin.command: "{{ aur_helper }} -S --needed --noconfirm {{ item }}"
+      loop: "{{ aur_phase6_optional_packages }}"
+      when:
+        - manage_aur
+        - install_throttled
+        - aur_helper | default('') != ''
+      tags: [phase6, aur]
+
+    - name: Phase 7 | Ensure niri config directory exists
+      become: false
+      ansible.builtin.file:
+        path: "{{ lookup('env', 'HOME') }}/.config/niri"
+        state: directory
+        mode: '0755'
+      tags: [phase7]
+
+    - name: Phase 7 | Link niri config from dotfiles
+      become: false
+      ansible.builtin.file:
+        src: "{{ dotfiles_dir }}/{{ dotfiles_niri_file }}"
+        dest: "{{ lookup('env', 'HOME') }}/.config/niri/config.kdl"
+        state: link
+        force: true
+      tags: [phase7]

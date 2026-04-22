@@ -1,0 +1,34 @@
+./setupT480.sh --phase 1 --dry-run
+[setupT480.sh] Dry-run mode enabled: skipping sudo authentication
+[setupT480.sh] Starting reproducible full stack setup for T480 on CachyOS
+[setupT480.sh] Phase 1/7 - System optimization and repositories
+[setupT480.sh] WARNING: No mirror ranking tool found. Skipping mirror optimization
+[setupT480.sh] DRY-RUN: sudo pacman -Syu --noconfirm 
+[setupT480.sh] DRY-RUN: sudo pacman -S --needed --noconfirm base-devel git curl pacman-contrib reflector 
+[setupT480.sh] WARNING: x86-64-v3 repository not detected in pacman configuration
+[setupT480.sh] WARNING: Check /etc/pacman.conf and CachyOS mirror/repo config
+[setupT480.sh] Completed. Reboot or re-login is recommended
+./setupT480.sh --phase 3 --dry-run
+[setupT480.sh] Dry-run mode enabled: skipping sudo authentication
+[setupT480.sh] Starting reproducible full stack setup for T480 on CachyOS
+[setupT480.sh] Phase 3/7 - Backend toolchains (C++, C#, Python)
+[setupT480.sh] DRY-RUN: sudo pacman -S --needed --noconfirm gcc clang cmake gdb ninja dotnet-sdk aspnet-runtime python python-pip 
+[setupT480.sh] WARNING: uv package not found in enabled repositories
+[setupT480.sh] Completed. Reboot or re-login is recommended
+./setupT480.sh --phase 4 --dry-run
+[setupT480.sh] Dry-run mode enabled: skipping sudo authentication
+[setupT480.sh] Starting reproducible full stack setup for T480 on CachyOS
+[setupT480.sh] Phase 4/7 - Frontend and cloud stack
+[setupT480.sh] DRY-RUN: sudo pacman -S --needed --noconfirm docker docker-compose postgresql-libs redis 
+[setupT480.sh] Installing fnm
+[setupT480.sh] DRY-RUN: curl -fsSL https://fnm.vercel.app/install | bash
+[setupT480.sh] DRY-RUN: sudo systemctl enable --now docker 
+[setupT480.sh] User is already in docker group
+[setupT480.sh] Completed. Reboot or re-login is recommended
+[34m[readiness][0m Evaluating execution readiness
+  - Platform package manager: pacman MISSING
+    Action: run this setup on CachyOS/Arch
+  - Ansible: MISSING
+    Action: make deps-ansible
+  - AUR helper: MISSING (optional, needed for AUR targets)
+[31m[readiness] NO-GO: resolve items above before real install[0m
